@@ -37,13 +37,13 @@ def clear_textbox():
 with gr.Blocks() as demo:
     with gr.Row():
         with gr.Column(scale=1):
-            chatbot = gr.Chatbot(value=[], height='90vh')
+            chatbot = gr.Chatbot(value=[], height='80vh')
         with gr.Column(scale=1):
-            pdf = PDF(label="Upload a PDF", interactive=True, height=680, container=True,scale=1)
+            pdf = PDF(label="Upload a PDF", interactive=True, height=500, container=True,scale=1)
     with gr.Row():
         query = gr.Textbox(show_label=False, placeholder='Enter your query and click submit', container=False, lines=3, scale=0.8)
         # Submit query
-        submit_btn = gr.Button('submit', scale=0.2)
+        submit_btn = gr.Button('Submit', scale=0.2)
 
     submit_btn.click(
             fn=respond, 
@@ -51,4 +51,5 @@ with gr.Blocks() as demo:
             outputs=[chatbot, ], 
             queue=False).then(clear_textbox, None, [query], queue=False)
     
+if __name__ == '__main__':
     demo.launch(debug=True)
