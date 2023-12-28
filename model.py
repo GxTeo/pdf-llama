@@ -1,18 +1,17 @@
 import os
 import sys
-import pinecone
-from langchain.llms import Replicate
-from langchain.vectorstores import Pinecone
+from dotenv import load_dotenv
+from PyPDF2 import PdfReader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.document_loaders import PyPDFLoader
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain.vectorstores import FAISS  
+from langchain.llms import HuggingFaceHub
 
-# Replicate API token
-os.environ['REPLICATE_API_TOKEN'] = "r8_BknXiKJbqkVFFySpLTISoSWjPyp0IOo4QpDkU"
-
-# Initialize Pinecone
-pinecone.init(api_key='41d95e1b-b768-49ac-aab4-3b79510e2273', environment='gcp-starter')
+load_dotenv()
+HUGGINGFACEHUB_API_TOKEN = os.environ["HUGGINGFACEHUB_API_TOKEN"] 
 
 class Process:
     def __init__(self, file):
@@ -20,34 +19,45 @@ class Process:
         pass
 
     def read_pdf(self):
-        loader = PyPDFLoader(self.filename)
-        documents = loader.load() 
 
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-        texts = text_splitter.split_documents(documents)
+        texts = ""
+        pdf_reader = PdfReader(self.filename)
+        for page in pdf_reader.pages:
+            texts += page.extract_text()
+        
+        # Split the documents into chunks of 1000 characters with an overlap of 20 characters
+        text_splitter = CharacterTextSplitter(separator='\n', chunk_size=1000, chunk_overlap=20)
+        texts = text_splitter.split_text(texts)
 
         return texts
 
+    def get_vectorstore(self):
+        
+        texts_chunks = self.read_pdf()
+        embeddings = HuggingFaceEmbeddings()
+        vectorstore = FAISS.from_texts(texts=texts_chunks, embedding=embeddings)
+
+        return vectorstore
+
 
     def setup_chain(self):
-        texts = self.read_pdf()
-
-        embeddings = HuggingFaceEmbeddings()
-
-        # Set up the Pinecone vector database
-        index_name = "pdf-llama"
-
-        index = pinecone.Index(index_name)
-        vectordb = Pinecone.from_documents(texts, embeddings, index_name=index_name)
-
-
-        llama2 = Replicate(model= "meta/llama-2-13b-chat:56acad22679f6b95d6e45c78309a2b50a670d5ed29a37dd73d182e89772c02f1",
-                            model_kwargs={"temperature": 0.75, "max_length": 2500})
         
+        repo_id = "google/flan-t5-xxl"
+
+        # Memory for chat history
+        memory = ConversationBufferMemory(memory_keys='chat_history', return_messages=True)
+
+        # Load model from HuggingFace 
+        # print(HUGGINGFACEHUB_API_TOKEN)
+        llm = HuggingFaceHub(repo_id=repo_id, huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN, model_kwargs={"max_length": 512, "temperature": 0.8})
+
+        # Retrieve the vectorstore
+        vectordb = self.get_vectorstore()
+
         # Set up the Conversational Retrieval Chain
         qa_chain = ConversationalRetrievalChain.from_llm(
-            llama2,
-            vectordb.as_retriever(search_kwargs={'k': 2}),
+            llm=llm,
+            retriever=vectordb.as_retriever(search_kwargs={'k': 2}),
             return_source_documents=True
         )
         return qa_chain
