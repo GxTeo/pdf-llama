@@ -42,6 +42,7 @@ class Process:
 
     def setup_chain(self):
         
+        # Llama 2 from Hugging Face requires PRO subscription
         repo_id = "google/flan-t5-xxl"
 
         # Memory for chat history
